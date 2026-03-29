@@ -1,6 +1,6 @@
 # claude-local-api
 
-将本地 Claude Code CLI 封装为 OpenAI 兼容的 HTTP API，方便通过 Chatbox、Cherry Studio 等客户端调用 Claude Max 订阅额度。
+将本地 Claude Code CLI 封装为 OpenAI 和 Anthropic 兼容的 HTTP API，方便通过 Chatbox、Cherry Studio 等客户端调用 Claude Max 订阅额度。
 
 ## 前置条件
 
@@ -41,6 +41,18 @@ OpenAI 兼容的聊天补全接口。
 curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"hello"}]}'
+```
+
+### POST /v1/messages
+
+Anthropic Messages API 兼容接口。
+
+```bash
+curl http://localhost:8080/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: any" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{"model":"claude-sonnet","max_tokens":1024,"messages":[{"role":"user","content":"hello"}]}'
 ```
 
 ### GET /v1/models

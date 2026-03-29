@@ -15,19 +15,64 @@ var mu sync.Mutex
 func writeCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, anthropic-version")
 }
 
-func writeError(w http.ResponseWriter, status int, msg string) {
+func writeJSON(w http.ResponseWriter, status int, v any) {
 	writeCORS(w)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(ErrorResponse{
+	json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, ErrorResponse{
 		Error: ErrorDetail{Message: msg, Type: "error"},
 	})
 }
 
+func writeAnthropicError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, AnthropicErrorResponse{
+		Type:  "error",
+		Error: ErrorDetail{Message: msg, Type: "invalid_request_error"},
+	})
+}
+
 const maxRequestBody = 1 << 20 // 1MB
+
+// callWithCLI handles the common flow: log, lock, call CLI, log result, handle errors.
+// Returns (result, true) on success or ("", false) on error (error response already written).
+func callWithCLI(w http.ResponseWriter, r *http.Request, messages []ChatMessage, errWriter func(http.ResponseWriter, int, string)) (string, bool) {
+	log.Printf("request: %d messages, last: %.50s...", len(messages), messages[len(messages)-1].Content)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	start := time.Now()
+	result, err := callClaude(r.Context(), messages)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		errMsg := err.Error()
+		log.Printf("error (%s): %s", elapsed, errMsg)
+		logRequest(messages, "", errMsg, elapsed)
+		switch {
+		case strings.Contains(errMsg, "timeout"):
+			errWriter(w, http.StatusGatewayTimeout, "claude cli timeout")
+		case strings.Contains(errMsg, "canceled"):
+			log.Printf("request canceled by client")
+		case strings.Contains(errMsg, "executable file not found"):
+			errWriter(w, http.StatusInternalServerError, "claude cli not found")
+		default:
+			errWriter(w, http.StatusBadGateway, fmt.Sprintf("claude cli failed: %s", errMsg))
+		}
+		return "", false
+	}
+
+	log.Printf("done (%s), response length: %d", elapsed, len(result))
+	logRequest(messages, result, "", elapsed)
+	return result, true
+}
 
 func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
@@ -46,44 +91,17 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-
 	if len(req.Messages) == 0 {
 		writeError(w, http.StatusBadRequest, "messages is required and must not be empty")
 		return
 	}
 
-	log.Printf("request: %d messages, last: %.50s...", len(req.Messages), req.Messages[len(req.Messages)-1].Content)
-
-	// Serialize access — no concurrent CLI calls
-	mu.Lock()
-	defer mu.Unlock()
-
-	start := time.Now()
-	result, err := callClaude(r.Context(), req.Messages)
-	elapsed := time.Since(start)
-
-	if err != nil {
-		errMsg := err.Error()
-		log.Printf("error (%s): %s", elapsed, errMsg)
-		logRequest(req.Messages, "", errMsg, elapsed)
-		switch {
-		case strings.Contains(errMsg, "timeout"):
-			writeError(w, http.StatusGatewayTimeout, "claude cli timeout")
-		case strings.Contains(errMsg, "canceled"):
-			// Client disconnected, no point writing response
-			log.Printf("request canceled by client")
-		case strings.Contains(errMsg, "executable file not found"):
-			writeError(w, http.StatusInternalServerError, "claude cli not found")
-		default:
-			writeError(w, http.StatusBadGateway, fmt.Sprintf("claude cli failed: %s", errMsg))
-		}
+	result, ok := callWithCLI(w, r, req.Messages, writeError)
+	if !ok {
 		return
 	}
 
-	log.Printf("done (%s), response length: %d", elapsed, len(result))
-	logRequest(req.Messages, result, "", elapsed)
-
-	resp := ChatCompletionResponse{
+	writeJSON(w, http.StatusOK, ChatCompletionResponse{
 		ID:      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
 		Object:  "chat.completion",
 		Created: time.Now().Unix(),
@@ -95,11 +113,47 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 				FinishReason: "stop",
 			},
 		},
+	})
+}
+
+func handleMessages(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		writeCORS(w)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeAnthropicError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
 	}
 
-	writeCORS(w)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody)
+	var req MessagesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeAnthropicError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(req.Messages) == 0 {
+		writeAnthropicError(w, http.StatusBadRequest, "messages is required and must not be empty")
+		return
+	}
+
+	result, ok := callWithCLI(w, r, req.Messages, writeAnthropicError)
+	if !ok {
+		return
+	}
+
+	writeJSON(w, http.StatusOK, MessagesResponse{
+		ID:   fmt.Sprintf("msg_%d", time.Now().UnixNano()),
+		Type: "message",
+		Role: "assistant",
+		Content: []ContentBlock{
+			{Type: "text", Text: result},
+		},
+		Model:        "claude-" + model,
+		StopReason:   "end_turn",
+		StopSequence: nil,
+	})
 }
 
 func handleModels(w http.ResponseWriter, r *http.Request) {
@@ -108,9 +162,7 @@ func handleModels(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	writeCORS(w)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"object": "list",
 		"data": []map[string]any{
 			{

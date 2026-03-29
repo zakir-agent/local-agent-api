@@ -140,6 +140,73 @@ func TestModels(t *testing.T) {
 	}
 }
 
+func TestMessages(t *testing.T) {
+	cleanup := setupMock("Hello from Claude!", nil)
+	defer cleanup()
+
+	body := `{"model":"claude-sonnet","max_tokens":1024,"messages":[{"role":"user","content":"hi"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handleMessages(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp MessagesResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if resp.Type != "message" {
+		t.Errorf("expected type 'message', got %q", resp.Type)
+	}
+	if resp.Role != "assistant" {
+		t.Errorf("expected role 'assistant', got %q", resp.Role)
+	}
+	if len(resp.Content) != 1 || resp.Content[0].Text != "Hello from Claude!" {
+		t.Errorf("unexpected content: %+v", resp.Content)
+	}
+	if resp.StopReason != "end_turn" {
+		t.Errorf("expected stop_reason 'end_turn', got %q", resp.StopReason)
+	}
+}
+
+func TestMessagesEmptyMessages(t *testing.T) {
+	body := `{"model":"claude-sonnet","max_tokens":1024,"messages":[]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handleMessages(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+
+	var resp AnthropicErrorResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if resp.Type != "error" {
+		t.Errorf("expected type 'error', got %q", resp.Type)
+	}
+}
+
+func TestMessagesCORS(t *testing.T) {
+	req := httptest.NewRequest(http.MethodOptions, "/v1/messages", nil)
+	w := httptest.NewRecorder()
+
+	handleMessages(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", w.Code)
+	}
+	if w.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Error("missing CORS header")
+	}
+}
+
 func TestFormatMessages(t *testing.T) {
 	messages := []ChatMessage{
 		{Role: "system", Content: "You are helpful."},
