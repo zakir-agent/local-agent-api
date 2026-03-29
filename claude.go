@@ -32,7 +32,7 @@ func callClaude(ctx context.Context, messages []ChatMessage) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, cliTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "claude", "-p", "--model", "sonnet", "--output-format", "json")
+	cmd := exec.CommandContext(ctx, "claude", "-p", "--model", model, "--output-format", "json")
 	cmd.Stdin = strings.NewReader(prompt)
 	out, err := cmd.Output()
 	if err != nil {

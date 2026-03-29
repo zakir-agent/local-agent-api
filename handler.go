@@ -87,7 +87,7 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		ID:      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
 		Object:  "chat.completion",
 		Created: time.Now().Unix(),
-		Model:   "claude-sonnet",
+		Model:   "claude-" + model,
 		Choices: []ChatCompletionChoice{
 			{
 				Index:        0,
@@ -114,7 +114,7 @@ func handleModels(w http.ResponseWriter, r *http.Request) {
 		"object": "list",
 		"data": []map[string]any{
 			{
-				"id":       "claude-sonnet",
+				"id":       "claude-" + model,
 				"object":   "model",
 				"created":  time.Now().Unix(),
 				"owned_by": "anthropic",

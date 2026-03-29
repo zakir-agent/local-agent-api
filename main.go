@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -11,7 +12,13 @@ import (
 	"time"
 )
 
+var model string
+
 func main() {
+	port := flag.String("port", "8080", "listen port")
+	flag.StringVar(&model, "model", "sonnet", "claude model to use")
+	flag.Parse()
+
 	if _, err := exec.LookPath("claude"); err != nil {
 		log.Fatal("claude CLI not found in PATH, please install it first")
 	}
@@ -22,7 +29,7 @@ func main() {
 	mux.HandleFunc("/v1/chat/completions", handleChatCompletions)
 	mux.HandleFunc("/v1/models", handleModels)
 
-	addr := ":8080"
+	addr := ":" + *port
 	srv := &http.Server{Addr: addr, Handler: mux}
 
 	// Graceful shutdown
