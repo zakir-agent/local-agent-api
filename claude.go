@@ -26,7 +26,9 @@ func formatMessages(messages []ChatMessage) string {
 	return b.String()
 }
 
-func callClaude(ctx context.Context, messages []ChatMessage) (string, error) {
+var callClaude = callClaudeCLI
+
+func callClaudeCLI(ctx context.Context, messages []ChatMessage) (string, error) {
 	prompt := formatMessages(messages)
 
 	ctx, cancel := context.WithTimeout(ctx, cliTimeout)
