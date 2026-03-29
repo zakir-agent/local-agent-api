@@ -11,8 +11,23 @@ import (
 
 const cliTimeout = 120 * time.Second
 
+type cliUsage struct {
+	InputTokens              int `json:"input_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+}
+
 type claudeResult struct {
-	Result string `json:"result"`
+	Result     string   `json:"result"`
+	StopReason string   `json:"stop_reason"`
+	Usage      cliUsage `json:"usage"`
+}
+
+type cliOutput struct {
+	Result     string
+	StopReason string
+	Usage      cliUsage
 }
 
 func formatMessages(messages []ChatMessage) string {
@@ -28,7 +43,7 @@ func formatMessages(messages []ChatMessage) string {
 
 var callClaude = callClaudeCLI
 
-func callClaudeCLI(ctx context.Context, messages []ChatMessage) (string, error) {
+func callClaudeCLI(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
 	prompt := formatMessages(messages)
 
 	ctx, cancel := context.WithTimeout(ctx, cliTimeout)
@@ -39,21 +54,25 @@ func callClaudeCLI(ctx context.Context, messages []ChatMessage) (string, error) 
 	out, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return "", fmt.Errorf("timeout")
+			return nil, fmt.Errorf("timeout")
 		}
 		if ctx.Err() == context.Canceled {
-			return "", fmt.Errorf("canceled")
+			return nil, fmt.Errorf("canceled")
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("cli error: %s", string(exitErr.Stderr))
+			return nil, fmt.Errorf("cli error: %s", string(exitErr.Stderr))
 		}
-		return "", fmt.Errorf("exec error: %w", err)
+		return nil, fmt.Errorf("exec error: %w", err)
 	}
 
 	var cr claudeResult
 	if err := json.Unmarshal(out, &cr); err != nil {
 		// If JSON parsing fails, use raw output as result
-		return strings.TrimSpace(string(out)), nil
+		return &cliOutput{Result: strings.TrimSpace(string(out))}, nil
 	}
-	return cr.Result, nil
+	return &cliOutput{
+		Result:     cr.Result,
+		StopReason: cr.StopReason,
+		Usage:      cr.Usage,
+	}, nil
 }

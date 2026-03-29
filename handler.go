@@ -42,14 +42,14 @@ const maxRequestBody = 1 << 20 // 1MB
 
 // callWithCLI handles the common flow: log, lock, call CLI, log result, handle errors.
 // Returns (result, true) on success or ("", false) on error (error response already written).
-func callWithCLI(w http.ResponseWriter, r *http.Request, messages []ChatMessage, errWriter func(http.ResponseWriter, int, string)) (string, bool) {
+func callWithCLI(w http.ResponseWriter, r *http.Request, messages []ChatMessage, errWriter func(http.ResponseWriter, int, string)) (*cliOutput, bool) {
 	log.Printf("request: %d messages, last: %.50s...", len(messages), messages[len(messages)-1].Content)
 
 	mu.Lock()
 	defer mu.Unlock()
 
 	start := time.Now()
-	result, err := callClaude(r.Context(), messages)
+	out, err := callClaude(r.Context(), messages)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -66,12 +66,12 @@ func callWithCLI(w http.ResponseWriter, r *http.Request, messages []ChatMessage,
 		default:
 			errWriter(w, http.StatusBadGateway, fmt.Sprintf("claude cli failed: %s", errMsg))
 		}
-		return "", false
+		return nil, false
 	}
 
-	log.Printf("done (%s), response length: %d", elapsed, len(result))
-	logRequest(messages, result, "", elapsed)
-	return result, true
+	log.Printf("done (%s), response length: %d", elapsed, len(out.Result))
+	logRequest(messages, out.Result, "", elapsed)
+	return out, true
 }
 
 func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -96,22 +96,35 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, ok := callWithCLI(w, r, req.Messages, writeError)
+	out, ok := callWithCLI(w, r, req.Messages, writeError)
 	if !ok {
 		return
+	}
+
+	promptTokens := out.Usage.InputTokens + out.Usage.CacheCreationInputTokens + out.Usage.CacheReadInputTokens
+	totalTokens := promptTokens + out.Usage.OutputTokens
+
+	finishReason := "stop"
+	if out.StopReason == "max_tokens" {
+		finishReason = "length"
 	}
 
 	writeJSON(w, http.StatusOK, ChatCompletionResponse{
 		ID:      fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano()),
 		Object:  "chat.completion",
 		Created: time.Now().Unix(),
-		Model:   "claude-" + model,
+		Model:   model,
 		Choices: []ChatCompletionChoice{
 			{
 				Index:        0,
-				Message:      ChatMessage{Role: "assistant", Content: result},
-				FinishReason: "stop",
+				Message:      ResponseMessage{Role: "assistant", Content: out.Result},
+				FinishReason: finishReason,
 			},
+		},
+		Usage: Usage{
+			PromptTokens:     promptTokens,
+			CompletionTokens: out.Usage.OutputTokens,
+			TotalTokens:      totalTokens,
 		},
 	})
 }
@@ -138,9 +151,14 @@ func handleMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, ok := callWithCLI(w, r, req.Messages, writeAnthropicError)
+	out, ok := callWithCLI(w, r, req.Messages, writeAnthropicError)
 	if !ok {
 		return
+	}
+
+	stopReason := out.StopReason
+	if stopReason == "" {
+		stopReason = "end_turn"
 	}
 
 	writeJSON(w, http.StatusOK, MessagesResponse{
@@ -148,11 +166,17 @@ func handleMessages(w http.ResponseWriter, r *http.Request) {
 		Type: "message",
 		Role: "assistant",
 		Content: []ContentBlock{
-			{Type: "text", Text: result},
+			{Type: "text", Text: out.Result},
 		},
-		Model:        "claude-" + model,
-		StopReason:   "end_turn",
+		Model:        model,
+		StopReason:   &stopReason,
 		StopSequence: nil,
+		Usage: MessagesUsage{
+			InputTokens:              out.Usage.InputTokens,
+			OutputTokens:             out.Usage.OutputTokens,
+			CacheCreationInputTokens: &out.Usage.CacheCreationInputTokens,
+			CacheReadInputTokens:     &out.Usage.CacheReadInputTokens,
+		},
 	})
 }
 
@@ -166,7 +190,7 @@ func handleModels(w http.ResponseWriter, r *http.Request) {
 		"object": "list",
 		"data": []map[string]any{
 			{
-				"id":       "claude-" + model,
+				"id":       model,
 				"object":   "model",
 				"created":  time.Now().Unix(),
 				"owned_by": "anthropic",

@@ -12,8 +12,15 @@ import (
 
 func setupMock(response string, err error) func() {
 	orig := callClaude
-	callClaude = func(ctx context.Context, messages []ChatMessage) (string, error) {
-		return response, err
+	callClaude = func(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
+		if err != nil {
+			return nil, err
+		}
+		return &cliOutput{
+			Result:     response,
+			StopReason: "end_turn",
+			Usage:      cliUsage{InputTokens: 10, OutputTokens: 5},
+		}, nil
 	}
 	return func() { callClaude = orig }
 }
@@ -168,8 +175,8 @@ func TestMessages(t *testing.T) {
 	if len(resp.Content) != 1 || resp.Content[0].Text != "Hello from Claude!" {
 		t.Errorf("unexpected content: %+v", resp.Content)
 	}
-	if resp.StopReason != "end_turn" {
-		t.Errorf("expected stop_reason 'end_turn', got %q", resp.StopReason)
+	if resp.StopReason == nil || *resp.StopReason != "end_turn" {
+		t.Errorf("expected stop_reason 'end_turn', got %v", resp.StopReason)
 	}
 }
 

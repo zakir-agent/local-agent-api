@@ -16,7 +16,7 @@ var model string
 
 func main() {
 	port := flag.String("port", "8080", "listen port")
-	flag.StringVar(&model, "model", "sonnet", "claude model to use")
+	flag.StringVar(&model, "model", "claude-sonnet-4-6", "claude model to use")
 	flag.Parse()
 
 	if _, err := exec.LookPath("claude"); err != nil {
