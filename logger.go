@@ -36,7 +36,9 @@ func getLogFile() (*os.File, error) {
 		return logFile, nil
 	}
 	if logFile != nil {
-		logFile.Close()
+		if err := logFile.Close(); err != nil {
+			log.Printf("warning: closing rotated log file: %v", err)
+		}
 	}
 	path := filepath.Join(logDir, today+".jsonl")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
@@ -52,7 +54,9 @@ func closeLogFile() {
 	logMu.Lock()
 	defer logMu.Unlock()
 	if logFile != nil {
-		logFile.Close()
+		if err := logFile.Close(); err != nil {
+			log.Printf("warning: closing log file: %v", err)
+		}
 		logFile = nil
 	}
 }
@@ -80,5 +84,7 @@ func logRequest(messages []ChatMessage, response string, errMsg string, elapsed 
 		log.Printf("warning: failed to open log file: %v", err)
 		return
 	}
-	f.Write(append(data, '\n'))
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		log.Printf("warning: failed to write log line: %v", err)
+	}
 }

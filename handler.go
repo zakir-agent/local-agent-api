@@ -36,7 +36,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	writeCORS(w)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("writeJSON: encode: %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
