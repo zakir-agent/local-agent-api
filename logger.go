@@ -10,11 +10,11 @@ import (
 )
 
 type RequestLog struct {
-	Time     string        `json:"time"`
-	ElapsedMs int64        `json:"elapsed_ms"`
-	Messages []ChatMessage `json:"messages"`
-	Response string        `json:"response"`
-	Error    string        `json:"error,omitempty"`
+	Time      string        `json:"time"`
+	ElapsedMs int64         `json:"elapsed_ms"`
+	Messages  []ChatMessage `json:"messages"`
+	Response  string        `json:"response"`
+	Error     string        `json:"error,omitempty"`
 }
 
 var (
