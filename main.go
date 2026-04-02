@@ -44,6 +44,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/chat/completions", handleChatCompletions)
+	mux.HandleFunc("/v1/responses", handleResponses)
 	mux.HandleFunc("/v1/messages", handleMessages)
 	mux.HandleFunc("/v1/models", handleModels)
 

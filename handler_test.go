@@ -109,6 +109,136 @@ func TestChatCompletionsCORS(t *testing.T) {
 	}
 }
 
+func TestResponsesStringInput(t *testing.T) {
+	cleanup := setupMock("Joke!", nil)
+	defer cleanup()
+
+	body := `{"model":"gpt-4o-mini","input":"tell me a joke"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handleResponses(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp ResponsesCreateResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if resp.Object != "response" {
+		t.Errorf("expected object 'response', got %q", resp.Object)
+	}
+	if resp.Status != "completed" {
+		t.Errorf("expected status completed, got %q", resp.Status)
+	}
+	if len(resp.Output) != 1 || resp.Output[0].Type != "message" {
+		t.Fatalf("expected one message output, got %+v", resp.Output)
+	}
+	if len(resp.Output[0].Content) != 1 || resp.Output[0].Content[0].Text != "Joke!" {
+		t.Errorf("unexpected output text: %+v", resp.Output[0].Content)
+	}
+	if resp.Output[0].Content[0].Type != "output_text" {
+		t.Errorf("expected output_text, got %q", resp.Output[0].Content[0].Type)
+	}
+	if resp.Usage.TotalTokens != resp.Usage.InputTokens+resp.Usage.OutputTokens {
+		t.Errorf("usage total mismatch: %+v", resp.Usage)
+	}
+}
+
+func TestResponsesInputMessageList(t *testing.T) {
+	cleanup := setupMock("Hi there", nil)
+	defer cleanup()
+
+	body := `{"input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handleResponses(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp ResponsesCreateResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if resp.Output[0].Content[0].Text != "Hi there" {
+		t.Errorf("expected Hi there, got %q", resp.Output[0].Content[0].Text)
+	}
+}
+
+func TestResponsesInstructionsPrependsSystem(t *testing.T) {
+	var got []ChatMessage
+	orig := callClaude
+	callClaude = func(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
+		got = messages
+		return &cliOutput{
+			Result:     "x",
+			StopReason: "end_turn",
+			Usage: cliUsage{
+				InputTokens:  1,
+				OutputTokens: 1,
+			},
+		}, nil
+	}
+	defer func() { callClaude = orig }()
+
+	body := `{"input":[{"role":"user","content":"hi"}],"instructions":"Be brief."}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handleResponses(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if len(got) != 2 || got[0].Role != "system" || got[0].Content != "Be brief." {
+		t.Fatalf("expected system instruction first: %+v", got)
+	}
+}
+
+func TestResponsesEmptyInput(t *testing.T) {
+	body := `{"input":""}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handleResponses(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestResponsesMultimodalRejected(t *testing.T) {
+	body := `{"input":[{"role":"user","content":[{"type":"input_image","image_url":"http://x"}]}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handleResponses(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestResponsesCORS(t *testing.T) {
+	req := httptest.NewRequest(http.MethodOptions, "/v1/responses", nil)
+	w := httptest.NewRecorder()
+
+	handleResponses(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", w.Code)
+	}
+	if w.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Error("missing CORS header")
+	}
+}
+
 func TestChatCompletionsCLIError(t *testing.T) {
 	cleanup := setupMock("", fmt.Errorf("cli error: something went wrong"))
 	defer cleanup()

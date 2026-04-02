@@ -1,5 +1,7 @@
 package main
 
+import "encoding/json"
+
 // OpenAI-compatible request/response types
 // Ref: https://github.com/openai/openai-python/blob/main/src/openai/types/chat/
 
@@ -59,6 +61,60 @@ type ErrorDetail struct {
 
 type ErrorResponse struct {
 	Error ErrorDetail `json:"error"`
+}
+
+// OpenAI Responses API (POST /v1/responses)
+// Ref: https://platform.openai.com/docs/api-reference/responses/create
+// Ref: https://github.com/openai/openai-python/blob/main/src/openai/types/responses/response.py
+
+type ResponsesCreateRequest struct {
+	Model        string          `json:"model,omitempty"`
+	Input        json.RawMessage `json:"input"`
+	Instructions json.RawMessage `json:"instructions,omitempty"`
+}
+
+type ResponseOutputTextBlock struct {
+	Type        string `json:"type"`
+	Text        string `json:"text"`
+	Annotations []any  `json:"annotations"`
+	Logprobs    any    `json:"logprobs,omitempty"`
+}
+
+type ResponsesOutputMessageItem struct {
+	ID      string                    `json:"id"`
+	Type    string                    `json:"type"`
+	Role    string                    `json:"role"`
+	Status  string                    `json:"status,omitempty"`
+	Content []ResponseOutputTextBlock `json:"content"`
+}
+
+type ResponsesUsage struct {
+	InputTokens        int `json:"input_tokens"`
+	InputTokensDetails struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"input_tokens_details"`
+	OutputTokens        int `json:"output_tokens"`
+	OutputTokensDetails struct {
+		ReasoningTokens int `json:"reasoning_tokens"`
+	} `json:"output_tokens_details"`
+	TotalTokens int `json:"total_tokens"`
+}
+
+type ResponsesCreateResponse struct {
+	ID                string                       `json:"id"`
+	Object            string                       `json:"object"`
+	CreatedAt         float64                      `json:"created_at"`
+	Model             string                       `json:"model"`
+	Output            []ResponsesOutputMessageItem `json:"output"`
+	Status            string                       `json:"status"`
+	CompletedAt       float64                      `json:"completed_at,omitempty"`
+	IncompleteDetails *struct {
+		Reason string `json:"reason"`
+	} `json:"incomplete_details,omitempty"`
+	Usage             ResponsesUsage `json:"usage"`
+	ParallelToolCalls bool           `json:"parallel_tool_calls"`
+	ToolChoice        string         `json:"tool_choice"`
+	Tools             []any          `json:"tools"`
 }
 
 // Anthropic Messages API types
