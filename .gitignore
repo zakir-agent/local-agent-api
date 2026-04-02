@@ -4,3 +4,4 @@ logs/
 .cursor/
 .claude/
 docs
+test.sh

@@ -44,7 +44,7 @@ OpenAI 兼容的聊天补全接口。
 ```bash
 curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"messages":[{"role":"user","content":"hello"}]}'
+  -d '{"model": "gpt-4.2","messages":[{"role":"user","content":"hello"}]}'
 ```
 
 ### POST /v1/responses

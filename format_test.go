@@ -107,6 +107,160 @@ func TestChatCompletionsResponseFormat(t *testing.T) {
 	}
 }
 
+// TestResponsesResponseFormat verifies response fields match the OpenAI Responses API shape.
+//
+// Response: https://github.com/openai/openai-python/blob/main/src/openai/types/responses/response.py
+func TestResponsesResponseFormat(t *testing.T) {
+	cleanup := mockCLIOutput()
+	defer cleanup()
+
+	body := `{"model":"gpt-4o-mini","input":"hi"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	handleResponses(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	m := parseJSON(t, w.Body.Bytes())
+
+	assertKeys(t, "root", m, []string{
+		"id", "object", "created_at", "model", "output", "status",
+		"completed_at", "usage", "parallel_tool_calls", "tool_choice", "tools",
+	})
+
+	if m["object"] != "response" {
+		t.Errorf("object: expected 'response', got %v", m["object"])
+	}
+	if m["status"] != "completed" {
+		t.Errorf("status: expected 'completed', got %v", m["status"])
+	}
+	if m["model"] != "gpt-4o-mini" {
+		t.Errorf("model: expected echo of request model, got %v", m["model"])
+	}
+
+	out := m["output"].([]any)
+	if len(out) != 1 {
+		t.Fatalf("expected 1 output item, got %d", len(out))
+	}
+	item := out[0].(map[string]any)
+	assertKeys(t, "output[0]", item, []string{
+		"id", "type", "role", "status", "content",
+	})
+	if item["type"] != "message" {
+		t.Errorf("output[0].type: expected 'message', got %v", item["type"])
+	}
+	if item["role"] != "assistant" {
+		t.Errorf("output[0].role: expected 'assistant', got %v", item["role"])
+	}
+	if item["status"] != "completed" {
+		t.Errorf("output[0].status: expected 'completed', got %v", item["status"])
+	}
+
+	blocks := item["content"].([]any)
+	if len(blocks) != 1 {
+		t.Fatalf("expected 1 content block, got %d", len(blocks))
+	}
+	blk := blocks[0].(map[string]any)
+	assertKeys(t, "output[0].content[0]", blk, []string{
+		"type", "text", "annotations",
+	})
+	if blk["type"] != "output_text" {
+		t.Errorf("content[0].type: expected 'output_text', got %v", blk["type"])
+	}
+	if blk["text"] != "hi" {
+		t.Errorf("content[0].text: expected CLI result 'hi', got %v", blk["text"])
+	}
+
+	usage := m["usage"].(map[string]any)
+	assertKeys(t, "usage", usage, []string{
+		"input_tokens", "input_tokens_details", "output_tokens",
+		"output_tokens_details", "total_tokens",
+	})
+	if usage["input_tokens"].(float64) != 160 {
+		t.Errorf("usage.input_tokens: expected 160, got %v", usage["input_tokens"])
+	}
+	if usage["output_tokens"].(float64) != 5 {
+		t.Errorf("usage.output_tokens: expected 5, got %v", usage["output_tokens"])
+	}
+	if usage["total_tokens"].(float64) != 165 {
+		t.Errorf("usage.total_tokens: expected 165, got %v", usage["total_tokens"])
+	}
+
+	inDet := usage["input_tokens_details"].(map[string]any)
+	assertKeys(t, "usage.input_tokens_details", inDet, []string{"cached_tokens"})
+	if inDet["cached_tokens"].(float64) != 50 {
+		t.Errorf("usage.input_tokens_details.cached_tokens: expected 50, got %v", inDet["cached_tokens"])
+	}
+
+	outDet := usage["output_tokens_details"].(map[string]any)
+	assertKeys(t, "usage.output_tokens_details", outDet, []string{"reasoning_tokens"})
+	if outDet["reasoning_tokens"].(float64) != 0 {
+		t.Errorf("usage.output_tokens_details.reasoning_tokens: expected 0, got %v", outDet["reasoning_tokens"])
+	}
+
+	parallel, ok := m["parallel_tool_calls"].(bool)
+	if !ok || parallel {
+		t.Errorf("parallel_tool_calls: expected false, got %v", m["parallel_tool_calls"])
+	}
+	if m["tool_choice"] != "auto" {
+		t.Errorf("tool_choice: expected 'auto', got %v", m["tool_choice"])
+	}
+	tools, ok := m["tools"].([]any)
+	if !ok || len(tools) != 0 {
+		t.Errorf("tools: expected empty array, got %v", m["tools"])
+	}
+}
+
+// TestResponsesResponseFormatIncomplete verifies incomplete status and incomplete_details.
+func TestResponsesResponseFormatIncomplete(t *testing.T) {
+	orig := callClaude
+	callClaude = func(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
+		return &cliOutput{
+			Result:     "trunc",
+			StopReason: "max_tokens",
+			Usage: cliUsage{
+				InputTokens:              10,
+				OutputTokens:             5,
+				CacheCreationInputTokens: 0,
+				CacheReadInputTokens:     0,
+			},
+		}, nil
+	}
+	defer func() { callClaude = orig }()
+
+	body := `{"input":"run until limit"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	handleResponses(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	m := parseJSON(t, w.Body.Bytes())
+
+	assertKeys(t, "root", m, []string{
+		"id", "object", "created_at", "model", "output", "status",
+		"completed_at", "incomplete_details", "usage",
+		"parallel_tool_calls", "tool_choice", "tools",
+	})
+
+	if m["status"] != "incomplete" {
+		t.Errorf("status: expected 'incomplete', got %v", m["status"])
+	}
+
+	inc, ok := m["incomplete_details"].(map[string]any)
+	if !ok {
+		t.Fatalf("incomplete_details: expected object, got %T", m["incomplete_details"])
+	}
+	assertKeys(t, "incomplete_details", inc, []string{"reason"})
+	if inc["reason"] != "max_output_tokens" {
+		t.Errorf("incomplete_details.reason: expected 'max_output_tokens', got %v", inc["reason"])
+	}
+}
+
 // TestMessagesResponseFormat verifies response fields match the anthropic-sdk-python.
 //
 // Message:    https://github.com/anthropics/anthropic-sdk-python/blob/main/src/anthropic/types/message.py
