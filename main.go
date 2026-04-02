@@ -12,15 +12,32 @@ import (
 	"time"
 )
 
-var model string
+var (
+	model      string
+	cliBackend string
+)
 
 func main() {
 	port := flag.String("port", "8080", "listen port")
-	flag.StringVar(&model, "model", "claude-sonnet-4-6", "claude model to use")
+	flag.StringVar(&model, "model", "claude-sonnet-4-6", "model for the backend CLI (--model)")
+	agentCLI := flag.String("agent-cli", "claude", "backend: claude (Claude Code) or cursor (Cursor Agent headless)")
 	flag.Parse()
 
-	if _, err := exec.LookPath("claude"); err != nil {
-		log.Fatal("claude CLI not found in PATH, please install it first")
+	switch *agentCLI {
+	case "claude":
+		cliBackend = "claude"
+		callClaude = callClaudeCLI
+		if _, err := exec.LookPath("claude"); err != nil {
+			log.Fatal("claude CLI not found in PATH, please install it first")
+		}
+	case "cursor":
+		cliBackend = "cursor"
+		callClaude = callCursorAgent
+		if _, err := exec.LookPath(cursorAgentBin); err != nil {
+			log.Fatalf("Cursor Agent CLI (%q) not found in PATH; see https://cursor.com/install and https://cursor.com/docs/cli/headless", cursorAgentBin)
+		}
+	default:
+		log.Fatal("-agent-cli must be claude or cursor")
 	}
 
 	initLogDir()
@@ -38,7 +55,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("claude-local-api listening on %s", addr)
+		log.Printf("local-agent-api listening on %s", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen error: %v", err)
 		}

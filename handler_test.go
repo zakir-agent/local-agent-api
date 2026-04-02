@@ -115,6 +115,7 @@ func TestChatCompletionsCLIError(t *testing.T) {
 
 	body := `{"messages":[{"role":"user","content":"hi"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
 	handleChatCompletions(w, req)

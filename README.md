@@ -1,34 +1,38 @@
-# claude-local-api
+# local-agent-api
 
-将本地 Claude Code CLI 封装为 OpenAI 和 Anthropic 兼容的 HTTP API，方便通过 Chatbox、Cherry Studio 等客户端调用 Claude Max 订阅额度。
+将本地 **Claude Code** 或 **Cursor Agent** CLI 封装为 OpenAI 与 Anthropic 兼容的 HTTP API，便于其他客户端使用本地已登录的订阅额度；默认后端为 Claude（`-agent-cli claude`），亦可切换 Cursor（`-agent-cli cursor`）。
 
 ## 前置条件
 
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 已安装并登录
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 已安装并登录（`-agent-cli claude`，默认）
+- 或 [Cursor Agent CLI](https://cursor.com/docs/cli/headless)（`agent`，非交互需 `-p` / `--print`；本仓库用 `-agent-cli cursor` 封装）
 - Go 1.21+（仅编译需要）
 
 ## 安装
 
 ```bash
-go install github.com/zakir-agent/claude-local-api@latest
+go install github.com/zakir-agent/local-agent-api@latest
 ```
 
 或从源码编译：
 
 ```bash
-git clone https://github.com/zakir-agent/claude-local-api.git
-cd claude-local-api
-go build
+git clone https://github.com/zakir-agent/local-agent-api.git
+cd local-agent-api
+go build -o local-agent-api .
 ```
 
 ## 使用
 
 ```bash
 # 默认监听 :8080，使用 sonnet 模型
-./claude-local-api
+./local-agent-api
 
 # 自定义端口和模型
-./claude-local-api -port 9090 -model opus
+./local-agent-api -port 9090 -model opus
+
+# 使用 Cursor Agent（headless：stdin 提示词 + JSON 输出）
+./local-agent-api -agent-cli cursor -model sonnet-4
 ```
 
 ## API

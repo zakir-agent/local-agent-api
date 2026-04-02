@@ -1,3 +1,6 @@
-claude-local-api
+local-agent-api
 *.exe
 logs/
+.cursor/
+.claude/
+docs

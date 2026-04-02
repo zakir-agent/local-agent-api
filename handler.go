@@ -58,13 +58,13 @@ func callWithCLI(w http.ResponseWriter, r *http.Request, messages []ChatMessage,
 		logRequest(messages, "", errMsg, elapsed)
 		switch {
 		case strings.Contains(errMsg, "timeout"):
-			errWriter(w, http.StatusGatewayTimeout, "claude cli timeout")
+			errWriter(w, http.StatusGatewayTimeout, "CLI timeout")
 		case strings.Contains(errMsg, "canceled"):
 			log.Printf("request canceled by client")
 		case strings.Contains(errMsg, "executable file not found"):
-			errWriter(w, http.StatusInternalServerError, "claude cli not found")
+			errWriter(w, http.StatusInternalServerError, "CLI not found")
 		default:
-			errWriter(w, http.StatusBadGateway, fmt.Sprintf("claude cli failed: %s", errMsg))
+			errWriter(w, http.StatusBadGateway, fmt.Sprintf("CLI failed: %s", errMsg))
 		}
 		return nil, false
 	}
@@ -186,6 +186,10 @@ func handleModels(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	ownedBy := "anthropic"
+	if cliBackend == "cursor" {
+		ownedBy = "cursor"
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"object": "list",
 		"data": []map[string]any{
@@ -193,7 +197,7 @@ func handleModels(w http.ResponseWriter, r *http.Request) {
 				"id":       model,
 				"object":   "model",
 				"created":  time.Now().Unix(),
-				"owned_by": "anthropic",
+				"owned_by": ownedBy,
 			},
 		},
 	})
