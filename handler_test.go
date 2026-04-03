@@ -11,8 +11,8 @@ import (
 )
 
 func setupMock(response string, err error) func() {
-	orig := callClaude
-	callClaude = func(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
+	orig := callAgentCLI
+	callAgentCLI = func(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
 		if err != nil {
 			return nil, err
 		}
@@ -22,7 +22,7 @@ func setupMock(response string, err error) func() {
 			Usage:      cliUsage{InputTokens: 10, OutputTokens: 5},
 		}, nil
 	}
-	return func() { callClaude = orig }
+	return func() { callAgentCLI = orig }
 }
 
 func TestChatCompletions(t *testing.T) {
@@ -172,8 +172,8 @@ func TestResponsesInputMessageList(t *testing.T) {
 
 func TestResponsesInstructionsPrependsSystem(t *testing.T) {
 	var got []ChatMessage
-	orig := callClaude
-	callClaude = func(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
+	orig := callAgentCLI
+	callAgentCLI = func(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
 		got = messages
 		return &cliOutput{
 			Result:     "x",
@@ -184,7 +184,7 @@ func TestResponsesInstructionsPrependsSystem(t *testing.T) {
 			},
 		}, nil
 	}
-	defer func() { callClaude = orig }()
+	defer func() { callAgentCLI = orig }()
 
 	body := `{"input":[{"role":"user","content":"hi"}],"instructions":"Be brief."}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))

@@ -38,15 +38,15 @@ func parseJSON(t *testing.T, data []byte) map[string]any {
 }
 
 func mockCLIOutput() func() {
-	orig := callClaude
-	callClaude = func(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
+	orig := callAgentCLI
+	callAgentCLI = func(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
 		return &cliOutput{
 			Result:     "hi",
 			StopReason: "end_turn",
 			Usage:      cliUsage{InputTokens: 10, OutputTokens: 5, CacheCreationInputTokens: 100, CacheReadInputTokens: 50},
 		}, nil
 	}
-	return func() { callClaude = orig }
+	return func() { callAgentCLI = orig }
 }
 
 // TestChatCompletionsResponseFormat verifies response fields match the openai-python SDK.
@@ -215,8 +215,8 @@ func TestResponsesResponseFormat(t *testing.T) {
 
 // TestResponsesResponseFormatIncomplete verifies incomplete status and incomplete_details.
 func TestResponsesResponseFormatIncomplete(t *testing.T) {
-	orig := callClaude
-	callClaude = func(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
+	orig := callAgentCLI
+	callAgentCLI = func(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
 		return &cliOutput{
 			Result:     "trunc",
 			StopReason: "max_tokens",
@@ -228,7 +228,7 @@ func TestResponsesResponseFormatIncomplete(t *testing.T) {
 			},
 		}, nil
 	}
-	defer func() { callClaude = orig }()
+	defer func() { callAgentCLI = orig }()
 
 	body := `{"input":"run until limit"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))

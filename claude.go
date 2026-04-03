@@ -6,10 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"time"
 )
-
-const cliTimeout = 120 * time.Second
 
 type cliUsage struct {
 	InputTokens              int `json:"input_tokens"`
@@ -40,8 +37,6 @@ func formatMessages(messages []ChatMessage) string {
 	}
 	return b.String()
 }
-
-var callClaude = callClaudeCLI
 
 func callClaudeCLI(ctx context.Context, messages []ChatMessage) (*cliOutput, error) {
 	prompt := formatMessages(messages)

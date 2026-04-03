@@ -9,9 +9,6 @@ import (
 	"strings"
 )
 
-// cursorAgentBin is the Cursor Agent executable on PATH (see https://cursor.com/docs/cli/headless).
-const cursorAgentBin = "agent"
-
 type cursorUsage struct {
 	InputTokens      int `json:"inputTokens"`
 	OutputTokens     int `json:"outputTokens"`
@@ -51,7 +48,7 @@ func callCursorAgent(ctx context.Context, messages []ChatMessage) (*cliOutput, e
 		args = append(args, "--model", model)
 	}
 
-	cmd := exec.CommandContext(ctx, cursorAgentBin, args...)
+	cmd := exec.CommandContext(ctx, "cursor-agent", args...)
 	cmd.Dir = os.TempDir()
 	cmd.Stdin = strings.NewReader(prompt)
 	out, err := cmd.Output()

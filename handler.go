@@ -65,7 +65,7 @@ func callWithCLI(w http.ResponseWriter, r *http.Request, messages []ChatMessage,
 	defer mu.Unlock()
 
 	start := time.Now()
-	out, err := callClaude(r.Context(), messages)
+	out, err := callAgentCLI(r.Context(), messages)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -399,7 +399,7 @@ func handleModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ownedBy := "anthropic"
-	if cliBackend == "cursor" {
+	if agentCLI == "cursor" {
 		ownedBy = "cursor"
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
