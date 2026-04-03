@@ -19,8 +19,8 @@ var (
 
 func main() {
 	port := flag.String("port", "8080", "listen port")
-	flag.StringVar(&model, "model", "claude-sonnet-4-6", "model for the backend CLI (--model)")
-	agentCLI := flag.String("agent-cli", "claude", "backend: claude (Claude Code) or cursor (Cursor Agent headless)")
+	flag.StringVar(&model, "model", "composer-2-fast", "model for the backend CLI (--model)")
+	agentCLI := flag.String("agent-cli", "cursor", "backend: claude (Claude Code) or cursor (Cursor Agent headless)")
 	flag.Parse()
 
 	switch *agentCLI {

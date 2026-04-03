@@ -43,7 +43,7 @@ func callCursorAgent(ctx context.Context, messages []ChatMessage) (*cliOutput, e
 	defer cancel()
 
 	args := []string{
-		"-p", "--output-format", "json",
+		"--print", "--output-format", "json",
 		"--trust",
 		"--mode", "ask",
 	}

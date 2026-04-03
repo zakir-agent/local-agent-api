@@ -1,12 +1,12 @@
 # local-agent-api
 
-将本地 **Claude Code** 或 **Cursor Agent** CLI 封装为 OpenAI（Chat Completions、**Responses API**）与 Anthropic 兼容的 HTTP API，便于其他客户端使用本地已登录的订阅额度；默认后端为 Claude（`-agent-cli claude`），亦可切换 Cursor（`-agent-cli cursor`）。
+将本地 **Claude Code** 或 **Cursor Agent** CLI 封装为 OpenAI（Chat Completions、**Responses API**）与 Anthropic 兼容的 HTTP API，便于其他客户端使用本地已登录的订阅额度。直接运行二进制时：默认监听 `:8080`、`-model` 为 **`composer-2-fast`**、`-agent-cli` 默认为 **`cursor`**；使用 Claude 时加 **`-agent-cli claude`**。
 
 ## 前置条件
 
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 已安装并登录（`-agent-cli claude`，默认）
-- 或 [Cursor Agent CLI](https://cursor.com/docs/cli/headless)（`agent`，非交互需 `-p` / `--print`；本仓库用 `-agent-cli cursor` 封装）
-- Go 1.21+（仅编译需要）
+- [Cursor Agent CLI](https://cursor.com/docs/cli/headless)（`agent`；默认 `-agent-cli cursor`）
+- 或 [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) 已安装并登录（使用 `-agent-cli claude` 时需要）
+- Go 1.26+（与 `go.mod` 一致，仅编译需要）
 
 ## 安装
 
@@ -25,15 +25,25 @@ go build -o local-agent-api .
 ## 使用
 
 ```bash
-# 默认监听 :8080，使用 sonnet 模型
+# 默认 :8080、-model composer-2-fast、-agent-cli cursor
 ./local-agent-api
 
-# 自定义端口和模型
-./local-agent-api -port 9090 -model opus
-
-# 使用 Cursor Agent（headless：stdin 提示词 + JSON 输出）
-./local-agent-api -agent-cli cursor -model sonnet-4
+# 自定义端口、模型、Agent
+./local-agent-api -port 9090 -model opus -agent-cli claude
 ```
+
+### 后台运行（关闭终端后仍保留进程）
+
+仓库提供 `nohup` 封装脚本，默认 **`AGENT_CLI=cursor`**、**`MODEL=composer-2-fast`**（可用环境变量覆盖，见 `./scripts/local-deploy.sh --help`）：
+
+```bash
+./scripts/local-deploy.sh start    # 先 go build，再 nohup 启动
+./scripts/local-deploy.sh status
+./scripts/local-deploy.sh stop
+./scripts/local-deploy.sh restart
+```
+
+日志：`logs/daemon.log`（脚本 stdout/stderr），应用请求日志仍在 `logs/` 下 JSONL。
 
 ## API
 
@@ -75,11 +85,11 @@ curl http://localhost:8080/v1/messages \
 
 ## 客户端配置
 
-在 Chatbox / Cherry Studio 等客户端中：
+在 Chatbox 等客户端中：
 
 - **API 地址**: `http://localhost:8080`
 - **API Key**: 任意值（不校验）
-- **模型**: `claude-sonnet`（走 Responses 模式的客户端请使用对应 Base URL，并选任意已声明模型名）
+- **模型**: 客户端里可填任意已声明名称（如 `claude-sonnet`）；真正传给 CLI 的模型由启动参数 `-model` 决定（默认 `composer-2-fast`）
 
 若客户端仅支持 OpenAI **Responses** 端点，将 API 根地址指向本服务即可使用 `/v1/responses`。
 

@@ -49,7 +49,7 @@ func callClaudeCLI(ctx context.Context, messages []ChatMessage) (*cliOutput, err
 	ctx, cancel := context.WithTimeout(ctx, cliTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "claude", "-p", "--model", model, "--output-format", "json")
+	cmd := exec.CommandContext(ctx, "claude", "--print", "--model", model, "--output-format", "json")
 	cmd.Stdin = strings.NewReader(prompt)
 	out, err := cmd.Output()
 	if err != nil {
